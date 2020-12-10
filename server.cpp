@@ -55,11 +55,14 @@ std::string Server::CommandParser(std::string str)
 	}*/
     if (args[0] == "get")
     {
-
         std::string v;
         if ((v = this->Get(args[1])) != "")
         {
             return v;
+        }
+        else
+        {
+            return "(nil)";
         }
     }
     else if (args[0] == "set")
@@ -89,7 +92,7 @@ std::string Server::Get(std::string key)
     {
         return it->second;
     }
-    return " ";
+    return "";
 }
 void Server::Del(std::string key)
 {
@@ -164,9 +167,12 @@ void Server::Start()
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-    //const char porta[6];
-    //sprintf(p, "%");
-    if ((status = getaddrinfo(NULL, "54545", &hints, &res) != 0))
+
+    char f[6];
+    sprintf(f, "%u", port);
+    const char *s = f;
+
+    if ((status = getaddrinfo(NULL, s, &hints, &res) != 0))
     {
         std::cout << "getaddrinfo:"
                   << gai_strerror(status) << std::endl;

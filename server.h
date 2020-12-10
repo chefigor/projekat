@@ -21,7 +21,9 @@ private:
     uint16_t port;
     uint8_t connections;
     std::unordered_map<std::string, std::string> map;
-    mutable std::shared_mutex mutex;
+    std::shared_mutex mutex;
+
+private:
     void Connect(int sfd);
     std::string Get(std::string);
     void Set(std::string, std::string);

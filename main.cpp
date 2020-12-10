@@ -8,10 +8,8 @@ int main(int argc, char *argv[])
         std::cout << "Potreban je port servera i broj dozvoljenih konekcija" << std::endl;
         return -1;
     }
-    int p = atoi(argv[1]);
-    auto port = htons(p);
+    uint16_t p = atoi(argv[1]);
     int c = atoi(argv[2]);
-    int connections = c;
-    Server s(port, c);
+    Server s(p, c);
     s.Start();
 }

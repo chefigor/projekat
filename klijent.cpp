@@ -17,9 +17,9 @@ int main(int argc, char *argv[])
     char ipstr[INET_ADDRSTRLEN];
     int sockfd;
 
-    if (argc != 2)
+    if (argc != 3)
     {
-        fprintf(stderr, "Potrebna je  adresa servera\n");
+        fprintf(stderr, "Potrebna je  adresa i port servera\n");
         return -1;
     }
 
@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((status = getaddrinfo(argv[1], "54545", &hints, &res)) != 0)
+    if ((status = getaddrinfo(argv[1], argv[2], &hints, &res)) != 0)
     {
         fprintf(stderr, "getaddrinfo:%s\n", gai_strerror(status));
 
