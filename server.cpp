@@ -13,26 +13,7 @@ Server::Server(uint16_t port, uint8_t connections)
 
 std::string Server::CommandParser(std::string str)
 {
-    // std::regex std::regex reg("(([getGET]|[setSET]|[delDEL])(.+)(.+))");
-    // std::sregex_iterator currentMatch(str.begin(), str.end(), reg);
-    // std::sregex_iterator lastMatch;
-    // std::smatch matches;
-    // std::vector<std::string> args;
-    // while (std::regex_search(str, matches, reg))
-    // {
-    //     if (matches.size() != 3)
-    //         return -1;
-    //     args.push_back(matches.str(1));
-    //     str = matches.suffix().str();
-    // }
-    // // while (currentMatch != lastMatch)
-    // // {
-    // //     std::smatch match = *currentMatch;
-    // //     std::cout << match.str() << "\n";
 
-    // //     currentMatch++;
-    // // }
-    // std::cout << std::endl;
     std::string delimiter = " ";
     size_t pos = 0;
     std::string token;
@@ -46,13 +27,6 @@ std::string Server::CommandParser(std::string str)
     }
     args.push_back(str);
 
-    /*   
-     size_t last = 0;
-	size_t next = 0;
-	while ((next = s.find(delimiter, last)) != string::npos)
-	{
-		cout << s.substr(last, next - last) << endl;   last = next + 1;
-	}*/
     if (args[0] == "get")
     {
         std::string v;
@@ -106,12 +80,6 @@ void Server::Connect(int sfd)
     size_t bsize = 1024;
     char buffer[bsize];
     memset(buffer, 0, bsize);
-    // if (recv(sfd, buffer, bsize, 0) == -1)
-    // {
-    //     std::cout << "Greska pri primanju podataka" << std::endl;
-    //     return;
-    // }
-    // std::cout << "Client:" << buffer << std::endl;
 
     while (true)
     {
