@@ -21,14 +21,27 @@ private:
     uint16_t port;
     uint8_t connections;
     std::unordered_map<std::string, std::string> map;
+    std::unordered_map<std::string, std::deque<std::string>> lmap;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> hmap;
     std::shared_mutex mutex;
+    std::shared_mutex lmutex;
+    std::shared_mutex hmutex;
 
 private:
     void Connect(int sfd);
     std::string Get(std::string);
-    void Set(std::string, std::string);
-    void Del(std::string);
+    std::string Set(std::string, std::string);
+    std::string Del(std::string);
     std::string CommandParser(std::string);
+    std::string LPush(std::string, std::string);
+    std::string RPush(std::string, std::string);
+    std::string LPop(std::string);
+    std::string RPop(std::string);
+    std::string LLen(std::string);
+    std::string LRange(std::string, std::string, std::string);
+    std::string HSet(std::string, std::string, std::string);
+    std::string HDel(std::string, std::string);
+    std::string HGet(std::string, std::string);
 
 public:
     Server();

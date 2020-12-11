@@ -13,51 +13,154 @@ Server::Server(uint16_t port, uint8_t connections)
 
 std::string Server::CommandParser(std::string str)
 {
-
-    std::string delimiter = " ";
-    size_t pos = 0;
-    std::string token;
     std::vector<std::string> args;
-
-    while ((pos = str.find(delimiter)) != std::string::npos)
-    {
-        token = str.substr(0, pos);
-        args.push_back(token);
-        str.erase(0, pos + delimiter.length());
-    }
-    args.push_back(str);
+    std::regex reg(R"(^(get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(\w+)? *(-?\w+)? *$)", std::regex_constants::icase);
+    std::smatch matches;
+    if (std::regex_search(str, matches, reg))
+        for (size_t i = 1; i < matches.size(); ++i)
+            args.push_back(matches[i]);
+    else
+        return "";
 
     if (args[0] == "get")
-    {
-        std::string v;
-        if ((v = this->Get(args[1])) != "")
-        {
-            return v;
-        }
-        else
-        {
-            return "(nil)";
-        }
-    }
+        return this->Get(args[1]);
     else if (args[0] == "set")
-    {
-        std::string first = args[1];
-        std::string second = args[2];
-        this->Set(first, second);
-        return "OK";
-    }
+        return this->Set(args[1], args[2]);
     else if (args[0] == "del")
-    {
-        this->Del(args[1]);
-        return "OK";
-    }
-
+        return this->Del(args[1]);
+    else if (args[0] == "lpush")
+        return this->LPush(args[1], args[2]);
+    else if (args[0] == "lpop")
+        return this->LPop(args[1]);
+    else if (args[0] == "rpush")
+        return this->RPush(args[1], args[2]);
+    else if (args[0] == "rpop")
+        return this->RPop(args[1]);
+    else if (args[0] == "llen")
+        return this->LLen(args[1]);
+    else if (args[0] == "lrange")
+        return this->LRange(args[1], args[2], args[3]);
+    else if (args[0] == "hset")
+        return this->HSet(args[1], args[2], args[3]);
+    else if (args[0] == "hget")
+        return this->HGet(args[1], args[2]);
+    else if (args[0] == "hdel")
+        return this->HDel(args[1], args[2]);
     return "";
 }
-void Server::Set(std::string key, std::string value)
+
+std::string Server::LPush(std::string key, std::string value)
 {
-    std::unique_lock<std::shared_mutex> lock(mutex);
+    std::unique_lock<std::shared_mutex> lock(lmutex);
+    lmap[key].push_front(value);
+    return "OK";
+}
+std::string Server::RPush(std::string key, std::string value)
+{
+    std::unique_lock<std::shared_mutex> lock(lmutex);
+    lmap[key].push_back(value);
+    return "OK";
+}
+std::string Server::LPop(std::string key)
+{
+    std::unique_lock<std::shared_mutex> lock(lmutex);
+    std::string res;
+
+    if (auto it = lmap.find(key); it != lmap.end())
+    {
+        if (!it->second.empty())
+        {
+            res = it->second.front();
+            it->second.pop_front();
+            if(it->second.empty()) lmap.erase(key);
+        }
+    }
+    return res;
+}
+std::string Server::RPop(std::string key)
+{
+    std::unique_lock<std::shared_mutex> lock(lmutex);
+    std::string res;
+    if (auto it = lmap.find(key); it != lmap.end())
+    {
+        if (!it->second.empty())
+        {
+            res = it->second.back();
+            it->second.pop_back();
+            if(it->second.empty()) lmap.erase(key);
+        }
+    }
+    return res;
+}
+std::string Server::LLen(std::string key)
+{
+    std::shared_lock<std::shared_mutex> lock(lmutex);
+    if (auto it = lmap.find(key); it != lmap.end())
+    {
+        return std::to_string(it->second.size());
+    }
+    return "(nil)";
+}
+std::string Server::LRange(std::string key, std::string sstart, std::string send)
+{
+    std::shared_lock<std::shared_mutex> lock(lmutex);
+    std::string res;
+    size_t start,end;
+    try{
+        start=std::stoi(sstart);
+        end=std::stoi(send);
+    }
+    catch(...)
+    {
+        return "Invalid input!";
+    }
+    if (auto it = lmap.find(key); it != lmap.end())
+    {
+        if (start == 0 && end == -1)
+            for (int i = 0; i < it->second.size(); i++)
+                res+=it->second[i]+" ";
+        else if (start >= 0 && start < it->second.size() && end >= start && end < it->second.size())
+            for (int i = start; i <= end; i++)
+                res+=it->second[i]+" ";
+        else
+            res += "Out of range";
+    }
+    return res;
+}
+
+std::string Server::HSet(std::string key, std::string field, std::string value)
+{
+    std::unique_lock<std::shared_mutex> lock(hmutex);
+    //hmap[key].operator[](field) = value;
+    hmap[key][field] = value;
+    return "OK";
+}
+std::string Server::HDel(std::string key, std::string field)
+{
+    std::unique_lock<std::shared_mutex> lock(hmutex);
+    if (auto it = hmap.find(key); it != hmap.end())
+    {
+        if(it->second.erase(field)){
+            if(it->second.size()==0)
+                hmap.erase(key);
+            return "OK";
+        }
+    }
+    return "";
+}   
+std::string Server::HGet(std::string key, std::string field)
+{
+    std::shared_lock<std::shared_mutex> lock(hmutex);
+    if (auto it = hmap.find(key); it != hmap.end())
+        if (auto it2 = it->second.find(field); it2 != it->second.end())
+            return it2->second;
+    return "(nil)";
+}
+std::string Server::Set(std::string key, std::string value)
+{
+    std::unique_lock<std::shared_mutex> lock(lmutex);
     map[key] = value;
+    return "OK";
 }
 std::string Server::Get(std::string key)
 {
@@ -66,12 +169,14 @@ std::string Server::Get(std::string key)
     {
         return it->second;
     }
-    return "";
+    return "(nil)";
 }
-void Server::Del(std::string key)
+std::string Server::Del(std::string key)
 {
     std::unique_lock<std::shared_mutex> lock(mutex);
-    map.erase(key);
+    if(map.erase(key))
+        return "OK";
+    return "";
 }
 
 void Server::Connect(int sfd)
@@ -114,7 +219,8 @@ void Server::Connect(int sfd)
                 return;
             }
         }
-        if (send(sfd, msg.c_str(), msg.length() + 1, 0) == -1)
+
+        else if (send(sfd, msg.c_str(), msg.length() + 1, 0) == -1)
         {
             std::cout << "Greska pri slanju" << std::endl;
             return;
