@@ -9,7 +9,7 @@ server.o: server.cpp
 	g++ -pthread -g -c server.cpp -std=c++17
 
 klijent: klijent.cpp
-	g++ klijent.cpp -o klijent
+	g++ -g klijent.cpp -o klijent
 	
 clean:
 	rm *.o output klijent
