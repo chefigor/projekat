@@ -160,7 +160,7 @@ void Server::Connect(int sfd) {
     while (true) {
         fill(buffsize.begin(), buffsize.end(), 0);
         if (recv(sfd, buffsize.data(), buffsize.size(), 0) <= 0) {
-            std::cout << "Greska pri primanju podataka" << std::endl;
+            std::cout << "Greska pri primanju podataka ili zatvorna veza" << std::endl;
             return;
         }
 

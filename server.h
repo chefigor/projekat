@@ -1,23 +1,24 @@
-#include <cstring>
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <errno.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netdb.h>
-#include <vector>
-#include <iostream>
-#include <thread>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cstdint>
-#include <unordered_map>
-#include <shared_mutex>
+#include <cstring>
+#include <iostream>
 #include <mutex>
-#include <string>
 #include <regex>
-class Server
-{
-private:
+#include <shared_mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+class Server {
+   private:
     uint16_t port;
     uint8_t connections;
     std::unordered_map<std::string, std::string> map;
@@ -27,7 +28,7 @@ private:
     std::shared_mutex lmutex;
     std::shared_mutex hmutex;
 
-private:
+   private:
     void Connect(int sfd);
     std::string Get(std::string);
     std::string Set(std::string, std::string);
@@ -43,7 +44,7 @@ private:
     std::string HDel(std::string, std::string);
     std::string HGet(std::string, std::string);
 
-public:
+   public:
     Server();
     Server(uint16_t, uint8_t);
     void Start();
