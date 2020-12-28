@@ -9,12 +9,18 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <regex>
 #include <string>
 #include <vector>
 
 class Klijent {
-   public:
-    static void InteractiveRun(std::string, std::string);
-    static void RunRegular(std::string, std::string,std::string);
+public:
+    void InteractiveRun(std::string, std::string);
+    void RunRegular(std::string, std::string, std::string);
+    // bool send(int sfd);
+    // bool recv();
+private:
+    int SendAll(int, std::vector<char>&, int&);
 };

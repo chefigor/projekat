@@ -8,40 +8,64 @@ Server::Server(uint16_t port, uint8_t connections) {
     this->port = port;
     this->connections = connections;
 }
+bool Server::caseInsensitiveCompare(std::string& str1, std::string&& str2) {
+    return ((str1.size() == str2.size()) &&
+            std::equal(
+                str1.begin(), str1.end(), str2.begin(), [](char& c1, char& c2) {
+                    return (c1 == c2 || std::toupper(c1) == std::toupper(c2));
+                }));
+}
 
-std::string Server::CommandParser(std::string str) {
+std::string Server::CommandParser(std::string& str) {
     std::vector<std::string> args;
-    std::regex reg(R"(^(get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(\w+)? *(-?\w+)? *$)", std::regex_constants::icase);
+    std::regex reg(
+        R"(^(get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(\w+)? *(-?\w+)? *$)",  // ovako ne radi hset i lrange
+        std::regex_constants::icase);
     std::smatch matches;
+    std::regex reg1(
+        R"((get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(.\n)*)",
+        std::regex_constants::icase);
     if (std::regex_search(str, matches, reg))
-        for (size_t i = 1; i < matches.size(); ++i)
-            args.push_back(matches[i]);
+        for (size_t i = 1; i < matches.size(); ++i) args.push_back(matches[i]);
+    else if (std::regex_search(str, matches, reg1))
+        for (size_t i = 1; i < matches.size(); ++i) args.push_back(matches[i]);
     else
         return "";
 
-    if (args[0] == "get")
+    if (caseInsensitiveCompare(args[0], "get"))
         return this->Get(args[1]);
-    else if (args[0] == "set")
-        return this->Set(args[1], args[2]);
-    else if (args[0] == "del")
+    else if (caseInsensitiveCompare(args[0], "set")) {
+        size_t last = 0;
+        size_t next = 0;
+        std::string s;
+        int i = 0;
+        while ((next = str.find(" ", last)) != std::string::npos && i < 2) {
+            // std::cout << m.substr(last, next - last + 1) << std::endl;
+            str.substr(last, next - last + 1);
+            last = next + 1;
+            i++;
+        }
+        std::string filename = str.substr(last);
+        return this->Set(args[1], filename);
+    } else if (caseInsensitiveCompare(args[0], "del"))
         return this->Del(args[1]);
-    else if (args[0] == "lpush")
+    else if (caseInsensitiveCompare(args[0], "lpush"))
         return this->LPush(args[1], args[2]);
-    else if (args[0] == "lpop")
+    else if (caseInsensitiveCompare(args[0], "lpop"))
         return this->LPop(args[1]);
-    else if (args[0] == "rpush")
+    else if (caseInsensitiveCompare(args[0], "rpush"))
         return this->RPush(args[1], args[2]);
-    else if (args[0] == "rpop")
+    else if (caseInsensitiveCompare(args[0], "rpop"))
         return this->RPop(args[1]);
-    else if (args[0] == "llen")
+    else if (caseInsensitiveCompare(args[0], "llen"))
         return this->LLen(args[1]);
-    else if (args[0] == "lrange")
+    else if (caseInsensitiveCompare(args[0], "lrange"))
         return this->LRange(args[1], args[2], args[3]);
-    else if (args[0] == "hset")
+    else if (caseInsensitiveCompare(args[0], "hset"))
         return this->HSet(args[1], args[2], args[3]);
-    else if (args[0] == "hget")
+    else if (caseInsensitiveCompare(args[0], "hget"))
         return this->HGet(args[1], args[2]);
-    else if (args[0] == "hdel")
+    else if (caseInsensitiveCompare(args[0], "hdel"))
         return this->HDel(args[1], args[2]);
     return "";
 }
@@ -66,7 +90,8 @@ std::string Server::LPop(std::string key) {
             it->second.pop_front();
             if (it->second.empty()) lmap.erase(key);
         }
-    }
+    } else
+        res = "(nil)";
     return res;
 }
 std::string Server::RPop(std::string key) {
@@ -78,7 +103,8 @@ std::string Server::RPop(std::string key) {
             it->second.pop_back();
             if (it->second.empty()) lmap.erase(key);
         }
-    }
+    } else
+        res = "(nil)";
     return res;
 }
 std::string Server::LLen(std::string key) {
@@ -88,7 +114,8 @@ std::string Server::LLen(std::string key) {
     }
     return "(nil)";
 }
-std::string Server::LRange(std::string key, std::string sstart, std::string send) {
+std::string Server::LRange(std::string key, std::string sstart,
+                           std::string send) {
     std::shared_lock<std::shared_mutex> lock(lmutex);
     std::string res;
     size_t start, end;
@@ -102,18 +129,19 @@ std::string Server::LRange(std::string key, std::string sstart, std::string send
         if (start == 0 && end == -1)
             for (int i = 0; i < it->second.size(); i++)
                 res += it->second[i] + " ";
-        else if (start >= 0 && start < it->second.size() && end >= start && end < it->second.size())
-            for (int i = start; i <= end; i++)
-                res += it->second[i] + " ";
+        else if (start >= 0 && start < it->second.size() && end >= start &&
+                 end < it->second.size())
+            for (int i = start; i <= end; i++) res += it->second[i] + " ";
         else
             res += "Out of range";
     }
     return res;
 }
 
-std::string Server::HSet(std::string key, std::string field, std::string value) {
+std::string Server::HSet(std::string key, std::string field,
+                         std::string value) {
     std::unique_lock<std::shared_mutex> lock(hmutex);
-    //hmap[key].operator[](field) = value;
+    // hmap[key].operator[](field) = value;
     hmap[key][field] = value;
     return "OK";
 }
@@ -121,8 +149,7 @@ std::string Server::HDel(std::string key, std::string field) {
     std::unique_lock<std::shared_mutex> lock(hmutex);
     if (auto it = hmap.find(key); it != hmap.end()) {
         if (it->second.erase(field)) {
-            if (it->second.size() == 0)
-                hmap.erase(key);
+            if (it->second.size() == 0) hmap.erase(key);
             return "OK";
         }
     }
@@ -135,12 +162,12 @@ std::string Server::HGet(std::string key, std::string field) {
             return it2->second;
     return "(nil)";
 }
-std::string Server::Set(std::string key, std::string value) {
+std::string Server::Set(std::string key, std::string& value) {
     std::unique_lock<std::shared_mutex> lock(lmutex);
     map[key] = value;
     return "OK";
 }
-std::string Server::Get(std::string key) {
+const std::string& Server::Get(std::string key) {
     std::shared_lock<std::shared_mutex> lock(mutex);
     if (auto it = map.find(key); it != map.end()) {
         return it->second;
@@ -149,26 +176,25 @@ std::string Server::Get(std::string key) {
 }
 std::string Server::Del(std::string key) {
     std::unique_lock<std::shared_mutex> lock(mutex);
-    if (map.erase(key))
-        return "OK";
+    if (map.erase(key)) return "OK";
     return "";
 }
 
 void Server::Connect(int sfd) {
-    std::vector<char> buffsize(4);
-    fill(buffsize.begin(), buffsize.end(), 0);
+    std::vector<char> recvbuff;
     while (true) {
-        fill(buffsize.begin(), buffsize.end(), 0);
-        if (recv(sfd, buffsize.data(), buffsize.size(), 0) <= 0) {
-            std::cout << "Greska pri primanju podataka ili zatvorna veza" << std::endl;
+        uint32_t size;
+
+        if (recv(sfd, &size, sizeof(size), MSG_WAITALL) <= 0) {
+            std::cout << "Greska pri primanju podataka ili zatvorna veza"
+                      << std::endl;
             return;
         }
-
-        unsigned int size = (int(buffsize[3]) << 24) + (int(buffsize[2]) << 16) + (int(buffsize[1]) << 8) + buffsize[0];
+        size = ntohl(size);
         std::cout << "Client message length:" << size << std::endl;
 
-        std::vector<char> recvbuff(size);
-        if (recv(sfd, recvbuff.data(), recvbuff.size() + 1, 0) <= 0) {
+        recvbuff.resize(size);
+        if (recv(sfd, recvbuff.data(), size, MSG_WAITALL) <= 0) {
             std::cout << "Greska pri primanju podataka" << std::endl;
             return;
         }
@@ -178,27 +204,28 @@ void Server::Connect(int sfd) {
 
         if (cstring == "quit") {
             std::string qmsg("Quitting...");
-            size = qmsg.size();
-            memcpy(buffsize.data(), &size, sizeof(size));
-            if (send(sfd, buffsize.data(), buffsize.size(), 0) < 1) {
+            size = htonl(qmsg.size());
+
+            if (send(sfd, &size, sizeof(size), 0) < 1) {
                 std::cout << "Greska pri slanju" << std::endl;
                 return;
             }
 
-            std::vector<char> sendbuff(qmsg.begin(), qmsg.end());
-            if (send(sfd, sendbuff.data(), sendbuff.size(), 0) == -1) {
-                std::cout << "Greska pri slanju" << std::endl;
+            if (send(sfd, qmsg.data(), qmsg.size(), 0) == -1) {
+                std::cout << "Greska pri slanju sendbuff" << std::endl;
                 return;
             }
+
             close(sfd);
             return;
         }
+
         std::string msg = CommandParser(cstring);
         if (msg == "") {
             std::string qmsg("Greska");
-            size = qmsg.size();
-            memcpy(buffsize.data(), &size, sizeof(size));
-            if (send(sfd, buffsize.data(), buffsize.size(), 0) == -1) {
+            size = htonl(qmsg.size());
+
+            if (send(sfd, &size, sizeof(size), 0) == -1) {
                 std::cout << "Greska pri slanju" << std::endl;
                 return;
             }
@@ -208,18 +235,17 @@ void Server::Connect(int sfd) {
                 return;
             }
         } else {
-            size = msg.size();
-            std::vector<char> buffsize(sizeof(size));
-            memcpy(buffsize.data(), &size, sizeof(size));
+            size = htonl(msg.size());
 
-            if (send(sfd, buffsize.data(), buffsize.size(), 0) == -1) {
+            if (send(sfd, &size, sizeof(size), 0) == -1) {
                 std::cout << "Greska pri slanju buffsize" << std::endl;
                 return;
             }
             std::vector<char> sendbuff(msg.begin(), msg.end());
-            if (send(sfd, sendbuff.data(), sendbuff.size(), 0) == -1) {
-                std::cout << "Greska pri slanju sendbuff" << std::endl;
-                return;
+            int len = sendbuff.size();
+            if (SendAll(sfd, sendbuff, len) == -1) {
+                std::cout << "Greska pri slanju poruke" << std::endl;
+                std::cout << "Poslato je samo " << len << " bajta" << std::endl;
             }
         }
     }
@@ -240,25 +266,25 @@ void Server::Start() {
 
     char f[6];
     sprintf(f, "%u", port);
-    const char *s = f;
+    const char* s = f;
 
     if ((status = getaddrinfo(NULL, s, &hints, &res) != 0)) {
-        std::cout << "getaddrinfo:"
-                  << gai_strerror(status) << std::endl;
+        std::cout << "getaddrinfo:" << gai_strerror(status) << std::endl;
         return;
     }
 
     for (p = res; p != nullptr; p = p->ai_next) {
-        if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) {
-            std::cout << "Greska kod socket f-je:"
-                      << strerror(errno) << std::endl;
+        if ((sockfd = socket(res->ai_family, res->ai_socktype,
+                             res->ai_protocol)) == -1) {
+            std::cout << "Greska kod socket f-je:" << strerror(errno)
+                      << std::endl;
             continue;
         }
 
         if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
             close(sockfd);
-            std::cout << "Greska kod bind f-je:"
-                      << strerror(errno) << std::endl;
+            std::cout << "Greska kod bind f-je:" << strerror(errno)
+                      << std::endl;
             continue;
         }
         break;
@@ -267,16 +293,16 @@ void Server::Start() {
     freeaddrinfo(res);
 
     if (listen(sockfd, connections) == -1) {
-        std::cout << "Greska kod listen f-je:"
-                  << strerror(errno) << std::endl;
+        std::cout << "Greska kod listen f-je:" << strerror(errno) << std::endl;
         return;
     }
 
     while (true) {
         addr_size = sizeof their_addr;
-        if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size)) == -1) {
-            std::cout << "Greska kod listen f-je:"
-                      << strerror(errno) << std::endl;
+        if ((new_fd = accept(sockfd, (struct sockaddr*)&their_addr,
+                             &addr_size)) == -1) {
+            std::cout << "Greska kod listen f-je:" << strerror(errno)
+                      << std::endl;
             continue;
         }
 
@@ -285,4 +311,20 @@ void Server::Start() {
     }
     close(sockfd);
     return;
+}
+
+int Server::SendAll(int sockfd, std::vector<char>& sendbuff, int& len) {
+    int total = 0;
+    int bytesLeft = len;
+    int n;
+    while (total < len) {
+        n = send(sockfd, sendbuff.data() + total, bytesLeft, 0);
+        if (n == -1) {
+            break;
+        }
+        total += n;
+        bytesLeft -= n;
+    }
+    len = total;
+    return n == -1 ? -1 : 0;
 }
