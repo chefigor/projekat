@@ -22,31 +22,21 @@ std::string Server::CommandParser(std::string& str) {
         R"(^(get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(\w+)? *(-?\w+)? *$)",  // ovako ne radi hset i lrange
         std::regex_constants::icase);
     std::smatch matches;
-    std::regex reg1(
-        R"((get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(.\n)*)",
-        std::regex_constants::icase);
+    std::regex regfile(R"(^(set|lpush|rpush|hset|) +(\w+) *(\w+)? *(\w+)? *)",
+                       std::regex_constants::icase); //da li ce mozda nekada zadnje dve capture grupe uhvatiti deo binarnog podatka?
     if (std::regex_search(str, matches, reg))
         for (size_t i = 1; i < matches.size(); ++i) args.push_back(matches[i]);
-    else if (std::regex_search(str, matches, reg1))
-        for (size_t i = 1; i < matches.size(); ++i) args.push_back(matches[i]);
-    else
+    else if (std::regex_search(str, matches, regfile)) {
+        for (size_t i = 1; i < matches.size(); ++i)
+            if (matches[i] != "") args.push_back(matches[i]);
+        args.push_back(matches.suffix().str());
+    } else
         return "";
 
     if (caseInsensitiveCompare(args[0], "get"))
         return this->Get(args[1]);
     else if (caseInsensitiveCompare(args[0], "set")) {
-        size_t last = 0;
-        size_t next = 0;
-        std::string s;
-        int i = 0;
-        while ((next = str.find(" ", last)) != std::string::npos && i < 2) {
-            // std::cout << m.substr(last, next - last + 1) << std::endl;
-            str.substr(last, next - last + 1);
-            last = next + 1;
-            i++;
-        }
-        std::string filename = str.substr(last);
-        return this->Set(args[1], filename);
+        return this->Set(args[1], args[2]);
     } else if (caseInsensitiveCompare(args[0], "del"))
         return this->Del(args[1]);
     else if (caseInsensitiveCompare(args[0], "lpush"))
@@ -200,7 +190,7 @@ void Server::Connect(int sfd) {
         }
 
         std::string cstring(recvbuff.begin(), recvbuff.end());
-        std::cout << "Client message:" << cstring << std::endl;
+        // std::cout << "Client message:" << cstring << std::endl;
 
         if (cstring == "quit") {
             std::string qmsg("Quitting...");

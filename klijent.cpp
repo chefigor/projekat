@@ -139,11 +139,14 @@ void Klijent::RunRegular(std::string adr, std::string port, std::string m) {
         sendbuff.insert(sendbuff.end(), s.begin(), s.end());
         last = next + 1;
     }
+    std::string filename = m.substr(last);
 
-    std::cout << s.max_size() << std::endl;
-    if (m.substr(0, m.find(" ", 0)) == "set") {
-        std::string filename = m.substr(last);
+    std::regex reg(R"(^(get|lpush|rpush|hset))");
+    std::smatch matches;
+    bool slanjevrednosti = false;
+    if (std::regex_search(m, matches, reg)) slanjevrednosti = true;
 
+    if (slanjevrednosti) {
         std::string line;
         std::ifstream is(filename,
                          std::ios::in | std::ios::binary | std::ios::ate);
@@ -193,17 +196,18 @@ void Klijent::RunRegular(std::string adr, std::string port, std::string m) {
         return;
     }
 
-    if (m.substr(0, m.find(" ", 0)) == "get") {
-        std::string filename = m.substr(last);
-
+    if (!slanjevrednosti) {
         std::ofstream os(filename, std::ios::out | std::ios::binary);
         if (os.is_open()) {
             os.write(recvbuff.data(), recvbuff.size());
             os.close();
         }
         recvbuff.push_back('\0');
+
+        std::cout << "Done!" << std::endl;
     }
-    // std::cout << "Server message:" << recvbuff.data() << std::endl;
+    else
+        std::cout << "Server message: " << recvbuff.data() << std::endl;
 
     close(sockfd);
     return;
