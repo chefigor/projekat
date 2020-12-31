@@ -22,22 +22,41 @@ std::string Server::CommandParser(std::string& str) {
         R"(^(get|set|del|lpush|lpop|rpush|rpop|llen|lrange|hset|hget|hdel) +(\w+) *(\w+)? *(-?\w+)? *$)",  // ovako ne radi hset i lrange
         std::regex_constants::icase);
     std::smatch matches;
-    std::regex regfile(R"(^(set|lpush|rpush|hset|) +(\w+) *(\w+)? *(\w+)? *)",
-                       std::regex_constants::icase); //da li ce mozda nekada zadnje dve capture grupe uhvatiti deo binarnog podatka?
+    std::regex regfile(
+        R"(^(set|lpush|rpush|hset|) +(\w+) *(\w+)? *(\w+)? *)",
+        std::regex_constants::icase);  // da li ce mozda nekada zadnje dve
+                                       // capture grupe uhvatiti deo binarnog
+                                       // podatka?
     if (std::regex_search(str, matches, reg))
         for (size_t i = 1; i < matches.size(); ++i) args.push_back(matches[i]);
     else if (std::regex_search(str, matches, regfile)) {
         for (size_t i = 1; i < matches.size(); ++i)
             if (matches[i] != "") args.push_back(matches[i]);
-        args.push_back(matches.suffix().str());
+        std::string chash = args.back();
+        std::string shash;
+        std::string file(matches.suffix().str());
+
+        DigestMessage(file, shash);
+        if (chash != shash) return "Error!";
+        if (caseInsensitiveCompare(args[0], "set"))
+            return this->Set(args[1], file);
+        if (caseInsensitiveCompare(args[0], "lpush"))
+            return this->LPush(args[1], file);
+
+        if (caseInsensitiveCompare(args[0], "rpush"))
+            return this->RPush(args[1], file);
+
+        if (caseInsensitiveCompare(args[0], "hset"))
+            return this->HSet(args[1], args[2], file);
+
     } else
         return "";
 
     if (caseInsensitiveCompare(args[0], "get"))
         return this->Get(args[1]);
-    else if (caseInsensitiveCompare(args[0], "set")) {
+    else if (caseInsensitiveCompare(args[0], "set"))
         return this->Set(args[1], args[2]);
-    } else if (caseInsensitiveCompare(args[0], "del"))
+    else if (caseInsensitiveCompare(args[0], "del"))
         return this->Del(args[1]);
     else if (caseInsensitiveCompare(args[0], "lpush"))
         return this->LPush(args[1], args[2]);
@@ -57,7 +76,8 @@ std::string Server::CommandParser(std::string& str) {
         return this->HGet(args[1], args[2]);
     else if (caseInsensitiveCompare(args[0], "hdel"))
         return this->HDel(args[1], args[2]);
-    return "";
+    else
+        return "";
 }
 
 std::string Server::LPush(std::string key, std::string value) {
@@ -317,4 +337,29 @@ int Server::SendAll(int sockfd, std::vector<char>& sendbuff, int& len) {
     }
     len = total;
     return n == -1 ? -1 : 0;
+}
+
+void Server::DigestMessage(const std::string& unhashed, std::string& hashed) {
+    EVP_MD_CTX* mdctx;
+
+    if ((mdctx = EVP_MD_CTX_new()) == NULL) std::cout << "Greska!" << std::endl;
+
+    if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
+        std::cout << "Greska! EVP_DigestInit_ex" << std::endl;
+
+    if (1 != EVP_DigestUpdate(mdctx, unhashed.data(), unhashed.length()))
+        std::cout << "Greska! EVP_DigestUpdate" << std::endl;
+
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int lengthOfHash = 0;
+
+    if (1 != EVP_DigestFinal_ex(mdctx, hash, &lengthOfHash))
+        std::cout << "Greska! EVP_DigestFinal_ex" << std::endl;
+
+    std::stringstream ss;
+    for (unsigned int i = 0; i < lengthOfHash; ++i) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    }
+    hashed = ss.str();
+    EVP_MD_CTX_free(mdctx);
 }

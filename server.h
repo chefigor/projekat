@@ -2,12 +2,14 @@
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <openssl/evp.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <regex>
@@ -48,6 +50,8 @@ private:
     std::string HGet(std::string, std::string);
 
     bool caseInsensitiveCompare(std::string&, std::string&&);
+
+    void DigestMessage(const std::string&, std::string&);
 
 public:
     Server();

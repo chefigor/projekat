@@ -1,6 +1,56 @@
 #include "klijent.h"
 
-int Klijent::SendAll(int sockfd, std::vector<char>& sendbuff, int& len) {
+// void Klijent::DigestMessage(const unsigned char* message, size_t message_len,
+//                             unsigned char** digest, unsigned int* digest_len)
+//                             {
+//     EVP_MD_CTX* mdctx;
+
+//     if ((mdctx = EVP_MD_CTX_new()) == NULL) std::cout << "Greska!" <<
+//     std::endl;
+
+//     if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
+//         std::cout << "Greska! EVP_DigestInit_ex" << std::endl;
+
+//     if (1 != EVP_DigestUpdate(mdctx, message, message_len))
+//         std::cout << "Greska! EVP_DigestUpdate" << std::endl;
+
+//     if ((*digest = (unsigned char*)OPENSSL_malloc(EVP_MD_size(EVP_sha256())))
+//     ==
+//         NULL)
+//         std::cout << "Greska! OPENSSL_malloc" << std::endl;
+
+//     if (1 != EVP_DigestFinal_ex(mdctx, *digest, digest_len))
+//         std::cout << "Greska! EVP_DigestFinal_ex" << std::endl;
+
+//     EVP_MD_CTX_free(mdctx);
+// }
+
+void Klijent::DigestMessage(const std::vector<char> unhashed,
+                            std::string& hashed) {
+    EVP_MD_CTX* mdctx;
+
+    if ((mdctx = EVP_MD_CTX_new()) == NULL) std::cout << "Greska!" << std::endl;
+
+    if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
+        std::cout << "Greska! EVP_DigestInit_ex" << std::endl;
+
+    if (1 != EVP_DigestUpdate(mdctx, unhashed.data(), unhashed.size()))
+        std::cout << "Greska! EVP_DigestUpdate" << std::endl;
+
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int lengthOfHash = 0;
+
+    if (1 != EVP_DigestFinal_ex(mdctx, hash, &lengthOfHash))
+        std::cout << "Greska! EVP_DigestFinal_ex" << std::endl;
+
+    std::stringstream ss;
+    for (unsigned int i = 0; i < lengthOfHash; ++i) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    }
+    hashed = ss.str();
+    EVP_MD_CTX_free(mdctx);
+}
+int Klijent::SendAll(int sockfd, std::vector<char>& sendbuff, int len) {
     int total = 0;
     int bytesLeft = len;
     int n;
@@ -129,6 +179,10 @@ void Klijent::RunRegular(std::string adr, std::string port, std::string m) {
     // send
 
     std::vector<char> sendbuff;
+    std::vector<char> filebuff;
+    std::string hash;
+
+    std::cout << sendbuff.capacity() << std::endl;
 
     size_t last = 0;
     size_t next = 0;
@@ -137,11 +191,13 @@ void Klijent::RunRegular(std::string adr, std::string port, std::string m) {
         // std::cout << m.substr(last, next - last + 1) << std::endl;
         s = m.substr(last, next - last + 1);
         sendbuff.insert(sendbuff.end(), s.begin(), s.end());
+        std::cout << sendbuff.capacity() << std::endl;
+
         last = next + 1;
     }
     std::string filename = m.substr(last);
 
-    std::regex reg(R"(^(get|lpush|rpush|hset))");
+    std::regex reg(R"(^(set|lpush|rpush|hset))");
     std::smatch matches;
     bool slanjevrednosti = false;
     if (std::regex_search(m, matches, reg)) slanjevrednosti = true;
@@ -151,36 +207,67 @@ void Klijent::RunRegular(std::string adr, std::string port, std::string m) {
         std::ifstream is(filename,
                          std::ios::in | std::ios::binary | std::ios::ate);
 
+        is.unsetf(std::ios::skipws);
         std::streampos fsize;
         char* memblock;
 
         if (is.is_open()) {
-            fsize = is.tellg();
-            memblock = new char[fsize];
+            int fsize = is.tellg();
+            std::cout << filebuff.capacity() << std::endl;
+            filebuff.reserve(fsize);
+            std::cout << filebuff.capacity() << std::endl;
+
             is.seekg(0, std::ios::beg);
-            is.read(memblock, fsize);
+            // ma  sendbuff.reserve(fsize + sendbuff.capacity());
+            filebuff.insert(filebuff.end(), std::istream_iterator<char>(is),
+                            std::istream_iterator<char>());
+
+            DigestMessage(filebuff, hash);
+
+            std::cout << "Sha256=" << hash << std::endl;
+
             is.close();
-            std::cout << fsize << " strlen:" << strlen(memblock) << std::endl;
-            sendbuff.insert(sendbuff.end(), memblock, memblock + fsize);
-            delete[] memblock;
+            std::cout << fsize << std::endl;
+            std::cout << filebuff.capacity() << std::endl;
+        }
+        uint32_t size = htonl(sendbuff.size() + filebuff.size() + hash.size());
+
+        if (send(sockfd, &size, sizeof(size), 0) < 1) {
+            std::cout << "Greska pri slanju duzine poruke" << std::endl;
+            return;
+        }
+
+        int len = sendbuff.size();
+        if (SendAll(sockfd, sendbuff, len) == -1) {
+            std::cout << "Greska pri slanju poruke" << std::endl;
+            std::cout << "Poslato je samo " << len << " bajta" << std::endl;
+        }
+        if (send(sockfd, hash.data(), hash.size(), 0) < 1) {
+            std::cout << "Greska pri slanju duzine poruke" << std::endl;
+            return;
+        }
+        len = filebuff.size();
+        if (SendAll(sockfd, filebuff, filebuff.size()) == -1) {
+            std::cout << "Greska pri slanju poruke" << std::endl;
+            std::cout << "Poslato je samo " << len << " bajta" << std::endl;
+        }
+    } else {
+        uint32_t size = htonl(sendbuff.size());
+
+        if (send(sockfd, &size, sizeof(size), 0) < 1) {
+            std::cout << "Greska pri slanju duzine poruke" << std::endl;
+            return;
+        }
+
+        int len = sendbuff.size();
+        if (SendAll(sockfd, sendbuff, len) == -1) {
+            std::cout << "Greska pri slanju poruke" << std::endl;
+            std::cout << "Poslato je samo " << len << " bajta" << std::endl;
         }
     }
 
-    uint32_t size = htonl(sendbuff.size());
-
-    if (send(sockfd, &size, sizeof(size), 0) < 1) {
-        std::cout << "Greska pri slanju duzine poruke" << std::endl;
-        return;
-    }
-
-    int len = sendbuff.size();
-    if (SendAll(sockfd, sendbuff, len) == -1) {
-        std::cout << "Greska pri slanju poruke" << std::endl;
-        std::cout << "Poslato je samo " << len << " bajta" << std::endl;
-    }
-
     // recv
-
+    uint32_t size;
     if (recv(sockfd, &size, sizeof(size), MSG_WAITALL) <= 0) {
         std::cout << "Greska pri primanju podataka" << std::endl;
         return;
@@ -205,9 +292,9 @@ void Klijent::RunRegular(std::string adr, std::string port, std::string m) {
         recvbuff.push_back('\0');
 
         std::cout << "Done!" << std::endl;
-    }
-    else
+    } else {
         std::cout << "Server message: " << recvbuff.data() << std::endl;
+    }
 
     close(sockfd);
     return;
