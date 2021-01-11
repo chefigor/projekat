@@ -1,30 +1,5 @@
 #include "klijent.h"
 
-// void Klijent::DigestMessage(const unsigned char* message, size_t message_len,
-//                             unsigned char** digest, unsigned int* digest_len)
-//                             {
-//     EVP_MD_CTX* mdctx;
-
-//     if ((mdctx = EVP_MD_CTX_new()) == NULL) std::cout << "Greska!" <<
-//     std::endl;
-
-//     if (1 != EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL))
-//         std::cout << "Greska! EVP_DigestInit_ex" << std::endl;
-
-//     if (1 != EVP_DigestUpdate(mdctx, message, message_len))
-//         std::cout << "Greska! EVP_DigestUpdate" << std::endl;
-
-//     if ((*digest = (unsigned char*)OPENSSL_malloc(EVP_MD_size(EVP_sha256())))
-//     ==
-//         NULL)
-//         std::cout << "Greska! OPENSSL_malloc" << std::endl;
-
-//     if (1 != EVP_DigestFinal_ex(mdctx, *digest, digest_len))
-//         std::cout << "Greska! EVP_DigestFinal_ex" << std::endl;
-
-//     EVP_MD_CTX_free(mdctx);
-// }
-
 void Klijent::DigestMessage(const std::vector<char> unhashed,
                             std::string& hashed) {
     EVP_MD_CTX* mdctx;
@@ -99,9 +74,13 @@ void Klijent::InteractiveRun(std::string adr, std::string port) {
     }
     freeaddrinfo(res);
 
+    auto start = std::chrono::steady_clock::now();
     std::vector<char> recvbuff;
     while (true) {
         // send
+        auto end = std::chrono::steady_clock::now();
+        std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()
+                  << " Client:" << std::endl;
         std::string m;
         getline(std::cin, m);
         uint32_t size = htonl(m.size());
@@ -134,9 +113,10 @@ void Klijent::InteractiveRun(std::string adr, std::string port) {
             std::cout << "Greska pri primanju podataka" << std::endl;
             return;
         }
+        end = std::chrono::steady_clock::now();
         recvbuff.push_back('\0');
-
-        std::cout << "Server message:" << recvbuff.data() << std::endl;
+        std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()
+                  << " Server:" << recvbuff.data() << std::endl;
     }
     close(sockfd);
     return;
